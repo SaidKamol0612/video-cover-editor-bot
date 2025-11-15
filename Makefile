@@ -2,4 +2,4 @@
 
 
 run:
-	poetry run python -m src.main
+	python3 -m src.run

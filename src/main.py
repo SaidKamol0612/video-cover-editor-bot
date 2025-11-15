@@ -115,20 +115,3 @@ async def telegram_webhook(request: Request):
 @app.get("/")
 async def root():
     return RedirectResponse(url="docs/")
-
-
-if __name__ == "__main__":
-    logging.basicConfig(
-        filename=settings.logging.log_file if not settings.DEBUG else None,
-        format=settings.logging.log_format,
-        datefmt=settings.logging.log_date_format,
-        style="%",
-        level=settings.logging.log_level_value,
-    )
-
-    uvicorn.run(
-        "src.main:app",
-        host=settings.app.host,
-        port=settings.app.port,
-        reload=settings.DEBUG,
-    )
