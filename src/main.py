@@ -1,15 +1,12 @@
+import asyncio
 import logging
-from contextlib import asynccontextmanager
 
-import uvicorn
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, Update
-from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from aiogram.types import Message
 
 from .config import settings
 from .user import users_json_util
@@ -84,34 +81,16 @@ async def handle_video(msg: Message, state: FSMContext):
     await state.clear()
 
 
-# -------------------- FASTAPI + WEBHOOK --------------------
+async def start_polling():
+    logging.basicConfig(
+        filename=settings.logging.log_file if not settings.DEBUG else None,
+        format=settings.logging.log_format,
+        datefmt=settings.logging.log_date_format,
+        level=settings.logging.log_level_value,
+    )
+
+    await dp.start_polling(bot)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await bot.set_webhook(settings.app.webhook_url)
-    logging.info(f"Webhook set: {settings.app.webhook_url}")
-
-    yield
-
-    await bot.delete_webhook()
-    logging.info("Webhook removed")
-    await bot.session.close()
-
-
-app = FastAPI(lifespan=lifespan)
-
-
-@app.post(settings.app.webhook_path)
-async def telegram_webhook(request: Request):
-    try:
-        update = Update.model_validate(await request.json())
-        await dp.feed_update(bot, update)
-    except Exception as e:
-        logging.exception(f"Error while processing update: {e}")
-    return {"ok": True}
-
-
-@app.get("/")
-async def root():
-    return RedirectResponse(url="docs/")
+if __name__ == "__main__":
+    asyncio.run(start_polling())

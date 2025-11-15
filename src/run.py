@@ -1,12 +1,14 @@
-from logging import Formatter
+import logging
+from contextlib import asynccontextmanager
 
-import uvicorn
-from fastapi import FastAPI
+from aiogram.types import Update
+from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
 from gunicorn.app.base import BaseApplication
 from gunicorn.glogging import Logger
 
 from .config import settings
-from .main import app
+from .main import app, bot, dp
 
 
 class GunicornLogger(Logger):
@@ -16,12 +18,18 @@ class GunicornLogger(Logger):
         self._set_handler(
             log=self.access_log,
             output=cfg.accesslog,
-            fmt=Formatter(fmt=settings.logging.log_format),
+            fmt=logging.Formatter(
+                fmt=settings.logging.log_format,
+                datefmt=settings.logging.log_date_format,
+            ),
         )
         self._set_handler(
             log=self.error_log,
             output=cfg.errorlog,
-            fmt=Formatter(fmt=settings.logging.log_format),
+            fmt=logging.Formatter(
+                fmt=settings.logging.log_format,
+                datefmt=settings.logging.log_date_format,
+            ),
         )
 
 
@@ -71,6 +79,36 @@ class Application(BaseApplication):
     def load_config(self):
         for key, value in self.config_options.items():
             self.cfg.set(key.lower(), value)  # type: ignore
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await bot.set_webhook(settings.app.webhook_url)
+    logging.info(f"Webhook set: {settings.app.webhook_url}")
+
+    yield
+
+    await bot.delete_webhook()
+    logging.info("Webhook removed")
+    await bot.session.close()
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.post(settings.app.webhook_path)
+async def telegram_webhook(request: Request):
+    try:
+        update = Update.model_validate(await request.json())
+        await dp.feed_update(bot, update)
+    except Exception as e:
+        logging.exception(f"Error while processing update: {e}")
+    return {"ok": True}
+
+
+@app.get("/")
+async def root():
+    return RedirectResponse(url="docs/")
 
 
 def guniorn_run():
